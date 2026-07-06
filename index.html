@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Full Bloom Counseling</title>
+<!--
+  This is the page your QR code points to.
+  On load it: (1) collects device + location info, (2) sends it to your
+  Google Sheet, (3) forwards the visitor to fullbloomcounseling.com.
+  The visitor just sees a brief "Taking you there..." splash.
+
+  >>> Set API_URL below to your Apps Script /exec URL (see README). <<<
+-->
+<style>
+  html,body{height:100%;margin:0}
+  body{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#FFFDF9;color:#3A2E24;text-align:center;padding:24px;
+  }
+  .bloom{font-size:15px;letter-spacing:.18em;text-transform:uppercase;color:#C86E12;margin-bottom:14px}
+  .msg{font-size:15px;color:#6b5d4f}
+  .dot{display:inline-block;width:7px;height:7px;margin:0 2px;border-radius:50%;
+       background:#EFA92B;animation:b 1s infinite ease-in-out}
+  .dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
+  @keyframes b{0%,80%,100%{transform:scale(.5);opacity:.4}40%{transform:scale(1);opacity:1}}
+</style>
+</head>
+<body>
+  <div class="bloom">Full Bloom Counseling</div>
+  <div class="msg">Taking you there
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+  </div>
+
+<script>
+// ========================= CONFIG =========================
+var API_URL  = "https://script.google.com/macros/s/AKfycbz_Nt3ReDB22yhyn29w4_WpJzNfGU2zbYXIhNwZDfEOVc7jwn7wLdDdFE-qLcz9qRpl/exec";
+var FORWARD  = "https://fullbloomcounseling.com";
+var MAX_WAIT = 900;    // ms to wait for logging before forwarding anyway
+// ==========================================================
+
+// ---- parse the user-agent into device / os / browser ----
+function parseUA(ua){
+  var os="Unknown", device="Desktop", browser="Unknown";
+  if(/iPhone|iPad|iPod/i.test(ua)){os="iOS";device=/iPad/i.test(ua)?"Tablet":"Phone";}
+  else if(/Android/i.test(ua)){os="Android";device=/Mobile/i.test(ua)?"Phone":"Tablet";}
+  else if(/Windows/i.test(ua)){os="Windows";}
+  else if(/Mac OS X/i.test(ua)){os="macOS";}
+  else if(/Linux/i.test(ua)){os="Linux";}
+  if(/CriOS|Chrome/i.test(ua))browser="Chrome";
+  else if(/FxiOS|Firefox/i.test(ua))browser="Firefox";
+  else if(/EdgiOS|Edg/i.test(ua))browser="Edge";
+  else if(/Safari/i.test(ua))browser="Safari";
+  return {os:os,device:device,browser:browser};
+}
+
+// ---- best-effort city-level location from IP (no permission prompt) ----
+function ipLocate(){
+  return fetch("https://ipapi.co/json/")
+    .then(function(r){return r.json();})
+    .then(function(j){return {
+      city:j.city||"",region:j.region||"",country:j.country_name||"",
+      lat:j.latitude||"",lon:j.longitude||"",locSource:"ip"
+    };})
+    .catch(function(){return {locSource:"none"};});
+}
+
+function forward(){ window.location.replace(FORWARD); }
+
+function run(){
+  var ua=navigator.userAgent||"";
+  var base=parseUA(ua);
+  var payload={device:base.device,os:base.os,browser:base.browser,
+               ua:ua,referrer:document.referrer||""};
+
+  // hard cap: forward no matter what after MAX_WAIT
+  var forwarded=false;
+  var cap=setTimeout(function(){if(!forwarded){forwarded=true;forward();}},MAX_WAIT);
+
+  // resolve location silently from IP only (no GPS = no permission popup)
+  ipLocate().then(function(loc){
+    Object.assign(payload,loc);
+
+    if(API_URL.indexOf("PASTE_")===0){ // not configured yet
+      if(!forwarded){forwarded=true;clearTimeout(cap);forward();}
+      return;
+    }
+    // fire-and-forget POST; no-cors so it works cross-origin to Apps Script
+    fetch(API_URL,{method:"POST",mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify(payload)})
+    .finally(function(){
+      if(!forwarded){forwarded=true;clearTimeout(cap);forward();}
+    });
+  });
+}
+run();
+</script>
+</body>
+</html>
